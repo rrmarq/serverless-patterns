@@ -5,8 +5,8 @@
 # The S3 bucket must exist before the CloudFormation stack, because the MicroVM
 # image's CodeArtifact.Uri points at the staged artifact. So this script:
 #   1. Creates the S3 state/staging bucket (CLI).
-#   2. Packages + uploads the MicroVM artifact (microvm/) and the middleware
-#      Lambda zip (middleware/ + bundled boto3 + vendored SDK model).
+#   2. Packages + uploads the MicroVM artifact (src/microvm/) and the middleware
+#      Lambda zip (src/middleware/ + bundled boto3 + vendored SDK model).
 #   3. Deploys template.yaml (image, IAM roles, DynamoDB, Lambda, API Gateway).
 #   4. Prints the stack outputs (Middleware URL for the web UI).
 #
@@ -66,16 +66,16 @@ fi
 # ── Step 2: package + upload artifacts ─────────────────────────────────────────
 echo "==> [2/4] Staging artifacts"
 
-# MicroVM artifact: zip the self-contained microvm/ folder (Dockerfile at root).
+# MicroVM artifact: zip the self-contained src/microvm/ folder (Dockerfile at root).
 ART_ZIP="$(mktemp -d)/artifact.zip"
-( cd microvm && zip -rq "$ART_ZIP" . -x '*/__pycache__/*' '__pycache__/*' )
+( cd src/microvm && zip -rq "$ART_ZIP" . -x '*/__pycache__/*' '__pycache__/*' )
 aws s3 cp "$ART_ZIP" "s3://${STATE_BUCKET}/${ARTIFACT_KEY}" --region "$AWS_REGION" >/dev/null
 echo "    microvm artifact -> s3://${STATE_BUCKET}/${ARTIFACT_KEY}"
 
 # Middleware Lambda: bundle the package + a current boto3/botocore (the runtime
 # boto3 does not know the lambda-microvms service) + the vendored SDK model.
 MW_BUILD="$(mktemp -d)"
-cp -r "$HERE/middleware" "$MW_BUILD/middleware"
+cp -r "$HERE/src/middleware" "$MW_BUILD/middleware"
 python3 -m pip install --quiet --target "$MW_BUILD" "boto3>=1.40.0" "botocore>=1.40.0" 2>&1 | tail -1 || {
   echo "ERROR: failed to install boto3/botocore into the middleware package"; exit 1; }
 ( cd "$MW_BUILD" && zip -qr middleware.zip . -x '*.sh' '*.md' '*.dist-info/*' '*/__pycache__/*' )
@@ -117,5 +117,5 @@ echo "   Middleware URL : $MIDDLEWARE_URL"
 echo "   MicroVM image  : $IMAGE_ARN"
 echo
 echo " Use the Middleware URL as the 'Middleware URL' in the web UI."
-echo " Serve the UI with:  (cd web && python3 -m http.server 5173)"
+echo " Serve the UI with:  (cd src/web && python3 -m http.server 5173)"
 echo "============================================================"
